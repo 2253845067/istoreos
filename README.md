@@ -20,10 +20,11 @@
 
 ## 刷机流程
 
-1. 刷 **12M 大分区 U-Boot**（HLOS 12MiB）；
-2. 刷 **2GB GPT 模板**（rootfs 扩到 2048MiB，用于装固件，不能省略）；
-3. U-Boot 页面刷本项目 `factory.bin`
-4. Web 升级 `sysupgrade.bin`。
+1. 旧的 iStoreOS 系统不用更新 U-Boot 和 2GB 分区，直接刷本仓库固件即可；
+2. 刷 **12M 大分区 U-Boot**（HLOS 12MiB）；
+3. 刷 **2GB GPT 模板**（rootfs 扩到 2048MiB，用于装固件，不能省略）；
+4. U-Boot 页面刷本项目 `factory.bin`；
+5. Web 升级 `sysupgrade.bin`。
 
 ### 刷机文件下载
 
