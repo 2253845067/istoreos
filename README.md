@@ -9,7 +9,7 @@
 | 设备名 | 京东云亚瑟 AX1800 Pro |
 | 内部型号 | JDCloud RE-SS-01 |
 | SoC | Qualcomm IPQ6000（四核 Cortex-A53） |
-| 内存 | 512 MB |
+| 内存 | 512 MB / 1024MB |
 | 存储 | eMMC（无 NAND） |
 | OpenWrt 标识 | `jdcloud_re-ss-01` |
 | 目标子架构 | `qualcommax / ipq60xx` |
