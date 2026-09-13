@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - istoreos-25.12
       - 'sync/**'
     paths:
       - 'feeds.conf.default'
@@ -691,10 +690,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ts.outputs.tag }}
-          # 必须显式指定，否则 GitHub 会把 tag 打到「仓库默认分支的 HEAD」上，
-          # 而本工作流跑在 sync/istoreos-25.12-* 上（默认分支 istoreos-25.12
-          # 通常落后），于是 Release 的 tag 指向一个陈旧提交，按 tag 检出源码
-          # 复现会拿到没有本次修复的代码。
+          # 必须显式指定，否则 GitHub 会把 tag 打到「仓库默认分支的 HEAD」上。
+          # 本工作流跑在 sync/istoreos-25.12-* 上；该分支目前就是默认分支，
+          # 所以暂时不会出错 —— 但这行必须永远保留：同步脚本将来一旦换成分支名
+          # （如 sync/istoreos-25.12-<新日期>），默认分支就可能落后于构建分支，
+          # 那时 tag 会指向陈旧提交，按 tag 检出源码复现将拿到没有本次修复的代码。
           target_commitish: ${{ github.sha }}
           name: 京东云亚瑟 AX1800 Pro (RE-SS-01) 固件 ${{ steps.ts.outputs.human }}
           files: |
