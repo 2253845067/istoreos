@@ -718,25 +718,11 @@ jobs:
           }
           CHANGELOG=$(pick '<!-- CHANGELOG-START -->' '<!-- CHANGELOG-END -->')
           UPSTREAM=$(pick '<!-- UPSTREAM-LOG-START -->' '<!-- UPSTREAM-LOG-END -->')
-          BASE=$(awk '/上游基线/{for(i=1;i<=NF;i++) if($i ~ /^istoreos\/istoreos@/){sub(/^istoreos\/istoreos@/,"",$i); print $i; exit}}' <<< "$MSG")
-
-          OUT=bin/targets/qualcommax/ipq60xx
-          FW=$(ls "$OUT"/*jdcloud*squashfs-sysupgrade.bin | head -1)
-          FWN=$(basename "$FW")
-          FWB=$(stat -c%s "$FW")
+          # 守卫：产物不存在就让这一步失败
+          ls bin/targets/qualcommax/ipq60xx/*jdcloud*squashfs-sysupgrade.bin >/dev/null
 
           {
             echo "iStoreOS 完整版 for 京东云亚瑟 AX1800 Pro（RE-SS-01, IPQ6000, eMMC）"
-            echo
-            echo "### 构建信息"
-            echo
-            echo "- 构建分支：\`${GITHUB_REF_NAME}\`"
-            echo "- 提交：\`${GITHUB_SHA}\`"
-            echo "- 固件：\`${FWN}\`（${FWB} 字节）"
-            echo "- 内核分区：12 MiB（KERNEL_SIZE=12288k，配合 HLOS12M GPT + U-Boot \`/big.html\` 端点）"
-            if [ -n "$BASE" ]; then
-              echo "- 上游基线：\`${BASE}\`"
-            fi
             echo
             echo "### 本次更新"
             echo
@@ -756,11 +742,6 @@ jobs:
             echo
             echo "### 固件包含"
             echo
-            echo "- quickstart + luci-app-quickstart（首页 / 网络向导）"
-            echo "- luci-app-store + taskd + luci-lib-taskd + luci-lib-xterm（iStore 应用商店）"
-            echo "- 存储服务：Samba4 / ksmbd / WebDAV / NFS / CIFS 挂载 / miniDLNA"
-            echo "- 服务菜单：终端(ttyd) / 网络唤醒 / UPnP / DDNS / Dockerman / 文件传输"
-            echo "- 外观：argon 主题与配置、中文语言包"
             echo "- TUN/TAP 虚拟网卡（kmod-tun）：TUN 模式代理可直接使用"
             echo "- daed 底层内核支持（BTF / XDP / BPF），daed 本体刷机后自行安装"
             echo
