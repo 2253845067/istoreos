@@ -32,6 +32,34 @@
 | 12M 大分区 U-Boot（jdcloud_re-ss-01） | [直接下载 .bin](https://github.com/chenxin527/uboot-qsdk12.5-build/releases/download/26.08.16-14.22.36-3011049/uboot-ipq60xx-jdcloud_re-ss-01-260816_142236_3011049.bin) |
 | GPT 模板（rootfs2048M / HLOS12M） | [直接下载 .bin](https://github.com/GHNERCH/DAEWRT-AX1800PRO/raw/main/gpt-JDC_AX1800_Pro_dual-boot_rootfs2048M_HLOS12M_no-last-partition.bin) |
 
+### U-Boot 版本说明
+
+<!-- UBOOT-NOTES-START -->
+**当前版本**：`26.08.16-14.22.36-3011049` ｜ **发布日期**：2026-08-16 ｜ [作者发布页](https://github.com/chenxin527/uboot-qsdk12.5-build/releases/tag/26.08.16-14.22.36-3011049)
+
+**更新内容**
+
+- **新特性**
+  - U-Boot 启动时打印设备信息（设备型号和 config_name）。
+  - 支持刷写纯 NOR 固件（分区表参考高通 [meta-tools](https://github.com/chenxin527/meta-tools) 中的 nor-partition.xml），暂不支持刷写单 firmware 分区的纯 NOR 固件。
+- **BUG 修复**
+  - 修复网络命令 (ping, tftpboot, tftpput 等) 在网页终端/Telnet 终端下执行后 httpd 可能失联的问题。
+  - 修复网页终端下部分命令执行时间过长导致 TCP 连接超时的问题。
+  - 修复 JDCloud BE6500 的 factory 固件解析失败的问题（将 factory 固件 kernel 大小限制调整为 1 MiB 的整数倍）。
+  - 修复 CMIOT AX18、Qihoo 360V6、Redmi AX5 JDCloud 和 ZN M2 部分网口不通的问题。
+- **优化**
+  - 只在 BOOTCONFIG 分区数据有效时执行 bootconfig 命令，避免用户主动擦除了 BOOTCONFIG 分区的情况下执行该命令导致固件刷写结果返回失败。
+  - 优化 9008 模式下的 MIBIB 自动重载逻辑。
+  - 优化 tftp/wget 文件传输进度、传输速率及文件大小信息显示。
+  - IPQ53xx/IPQ95xx: 防止长时间无网络活动导致 PPE 硬件休眠。
+  - wget/flashread: 当用户未指定加载地址且 loadaddr 环境变量未设置时，根据设备内存大小自动设置默认加载地址。
+  - autoboot: 若 bootcmd 不是 bootipq 且其运行失败，则自动尝试运行 bootipq。
+- **其他**
+  - 默认开启 httpd_debug 模式，打印详细的日志信息，便于调试。
+  - 调整 CMIOT AX18、Redmi AX5 JDCloud 和 ZN M2 的 LED 配置。
+  - 精简部分机型包含的额外 DTB，减小 U-Boot 大小。
+<!-- UBOOT-NOTES-END -->
+
 ## 安装加强版 daed（大鹅）
 
 国内网络复制链接一键安装：
