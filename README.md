@@ -21,7 +21,7 @@
 
 ## 刷机流程
 
-1. 刷 **12M 大分区 U-Boot**（HLOS 12MiB）；
+1. 刷 **12M 大分区 U-Boot**（HLOS 12MiB），旧 U-Boot 刷入地址：http://192.168.1.1/uboot.html；
 2. 刷 **2GB GPT 模板**（rootfs 扩到 2048MiB，用于装固件，不能省略）；
 3. U-Boot 页面刷本项目 `factory.bin`；
 4. Web 升级 `sysupgrade.bin`。
