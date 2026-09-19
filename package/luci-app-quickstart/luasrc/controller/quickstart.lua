@@ -6,8 +6,11 @@ function index()
     if luci.sys.call("pgrep quickstart >/dev/null") == 0 then
         local uci = require "luci.model.uci".cursor()
         entry({"admin", "quickstart"}, template("quickstart/home"), _("QuickStart"), 1).leaf = true
-        entry({"admin", "network_guide"}, call("networkguide_index"), _("NetworkGuide"), 2)
-        entry({"admin", "network_guide", "pages"}, call("quickstart_index", {index={"admin", "network_guide", "pages"}})).leaf = true
+        -- 2026-09-20 按需求移除「网络向导」菜单项：
+        -- 原本这里还有两行 entry 注册（NetworkGuide 及其 pages 子路由），
+        -- 连同 networkguide_index() 一并删除；首页 SPA 未引用该路径
+        -- （grep 过 htdocs 打包产物），删掉后无死链。
+        -- 需要恢复时对照上游 luci-app-quickstart 加回即可。
         if uci:get("quickstart", "main", "wifi_menu") == "1" then
             entry({"admin", "quickwifi"}, call("quickwifi_index"), _("Wireless"), 3)
             entry({"admin", "quickwifi", "pages"}, call("quickstart_index", {index={"admin", "quickwifi", "pages"}})).leaf = true
@@ -27,9 +30,7 @@ function index()
     end
 end
 
-function networkguide_index()
-    luci.http.redirect(luci.dispatcher.build_url("admin", "network_guide", "pages", "network"))
-end
+-- networkguide_index() 已随「网络向导」菜单项一并移除（2026-09-20）
 
 function quickwifi_index()
     luci.http.redirect(luci.dispatcher.build_url("admin", "quickwifi", "pages", "quickwifi"))

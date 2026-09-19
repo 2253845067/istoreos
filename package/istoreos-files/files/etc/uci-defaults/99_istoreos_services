@@ -46,12 +46,10 @@ enable_one startdhns boot
 enable_one tasks start
 
 # 其余随包安装的常用服务，装了就开
+# （docker/dockerd 已于 2026-09-20 按需求从固件移除，不再自启；
+#   samba4 / ksmbd / minidlna / hd-idle 同批移除。enable_one 只在
+#   init.d 脚本存在时才动作，经 iStore 商店装回后重置配置即可自启。）
 enable_one ttyd start
-enable_one dockerd start
-enable_one samba4 start
-enable_one ksmbd start
-enable_one minidlna start
-enable_one hd-idle start
 
 # 清理 LuCI 菜单缓存，确保新注册的入口立即生效
 rm -f /tmp/luci-indexcache /tmp/luci-indexcache.*

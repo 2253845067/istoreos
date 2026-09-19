@@ -1,5 +1,10 @@
 #!/bin/sh
 
+# 守卫：本固件默认不编入 docker（2026-09-20 移除）。
+# 没有 dockerd 二进制时直接退出，避免生成指向不存在接口的 NAT 规则；
+# 若日后经 iStore 商店装回 docker，重装/重置时会再次执行本脚本补上规则。
+command -v dockerd >/dev/null 2>&1 || exit 0
+
 uci -q batch <<-EOF
 	set firewall.docker_nat=nat
 	set firewall.docker_nat.name='DockerNAT'

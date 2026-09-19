@@ -1,5 +1,9 @@
 #!/bin/sh
 
+# 守卫：本固件默认不编入 upnp / miniupnpd（2026-09-20 移除），
+# 无 /etc/config/upnpd 时直接跳过；经 iStore 商店装回后重置配置即可生效。
+[ -e /etc/config/upnpd ] || exit 0
+
 uci -q batch <<-EOF >/dev/null
     delete upnpd.config.use_stun
     set upnpd.config.stun_host='stun.sipgate.net'
