@@ -69,6 +69,8 @@
 wget --no-check-certificate -O - https://ghfast.top/https://raw.githubusercontent.com/kenzok8/openwrt-daede/refs/heads/main/scripts/install.sh | ash
 ```
 
+其他翻墙插件下载地址：[Are-u-ok iStoreOS_25.12 发布页](https://github.com/bcseputetto/Are-u-ok/releases/tag/iStoreOS_25.12)（AX1800 Pro 为 aarch64_a53 架构，请下载对应版本）。
+
 512m内存的设备节点不要搞太多，搞太多爆内存，路由器会死掉。
 
 ## 无线（手动开启）
