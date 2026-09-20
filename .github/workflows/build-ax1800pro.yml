@@ -40,10 +40,18 @@ jobs:
           # 内核按 shebang exec 时去找 "/etc/rc.common\r" → "No such file or
           # directory"，服务永远起不来 → 首页无数据、QuickStart 点开空白、
           # iStore 商店打不开。这里统一转成 LF 并在末尾断言，防止再引入 CRLF。
+          #
+          # 【二进制文件必须跳过】(2026-09-21 run 修复)
+          # files/etc 下有二进制文件（如 dropbear/dropbear_failsafe_host_key，
+          # openssh 二进制密钥，天然含 0x0D 字节）。sed/grep 若不区分文本，
+          # 会误报 CR 并可能破坏密钥内容。故：
+          #   - 规范化只对「文本且含 CR」的文件做（grep -lIZ 筛选）
+          #   - 断言用 grep -I 跳过二进制文件
           find package/quickstart package/luci-app-quickstart \
                package/istoreos-files/files/etc -type f -print0 \
+            | xargs -0 -r grep -lIZ $'\r' \
             | xargs -0 -r sed -i 's/\r$//'
-          if grep -rlU $'\r' package/quickstart package/luci-app-quickstart \
+          if grep -rlUI $'\r' package/quickstart package/luci-app-quickstart \
                package/istoreos-files/files/etc; then
             echo "::error::以上文件仍含 CR，固件内脚本将无法执行"
             exit 1
