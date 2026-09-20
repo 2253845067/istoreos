@@ -18,8 +18,12 @@ function index()
         if nixio.fs.access("/usr/lib/lua/luci/view/quickstart/main_dev.htm") then
             entry({"admin", "quickstart_dev"}, call("quickstart_dev", {index={"admin", "quickstart_dev"}})).leaf = true
         end
-        entry({"admin", "nas", "raid"}, call("quickstart_index", {index={"admin", "nas"}}), _("RAID"), 10).leaf = true
-        entry({"admin", "nas", "smart"}, call("quickstart_index", {index={"admin", "nas"}}), _("S.M.A.R.T."), 11).leaf = true
+        -- 2026-09-21 按需求移除「RAID」「S.M.A.R.T.」左侧菜单项：
+        -- 去掉 title 参数后路由保留（首页磁盘卡片有指向这两个路由的
+        -- 链接，打包产物 htdocs index.js 里 grep 得到），但不再出现在
+        -- LuCI 菜单。需要恢复菜单时把 title 加回即可。
+        entry({"admin", "nas", "raid"}, call("quickstart_index", {index={"admin", "nas"}})).leaf = true
+        entry({"admin", "nas", "smart"}, call("quickstart_index", {index={"admin", "nas"}})).leaf = true
         entry({"admin", "network", "interfaceconfig"}, call("quickstart_index", {index={"admin", "network"}}), _("NetworkPort"), 11).leaf = true
 
         entry({"admin", "nas", "quickstart"}).dependent = false

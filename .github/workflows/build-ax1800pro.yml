@@ -41,10 +41,10 @@ jobs:
           # directory"，服务永远起不来 → 首页无数据、QuickStart 点开空白、
           # iStore 商店打不开。这里统一转成 LF 并在末尾断言，防止再引入 CRLF。
           find package/quickstart package/luci-app-quickstart \
-               package/istoreos-files/files/etc/uci-defaults -type f -print0 \
+               package/istoreos-files/files/etc -type f -print0 \
             | xargs -0 -r sed -i 's/\r$//'
           if grep -rlU $'\r' package/quickstart package/luci-app-quickstart \
-               package/istoreos-files/files/etc/uci-defaults; then
+               package/istoreos-files/files/etc; then
             echo "::error::以上文件仍含 CR，固件内脚本将无法执行"
             exit 1
           fi
@@ -536,7 +536,7 @@ jobs:
                    etc/init.d/tasks \
                    etc/uci-defaults/99_istoreos_services \
                    etc/uci-defaults/98_luci_default_lang \
-                   etc/uci-defaults/99_wifi_default \
+                   etc/init.d/wifi_default \
                    usr/lib/lua/luci/controller/quickstart.lua \
                    www/luci-static/quickstart/index.js \
                    www/luci-static/quickstart/vendor.js; do
@@ -665,6 +665,9 @@ jobs:
           # 「网络向导」必须真的移除（2026-09-20）：
           # 控制器里不得再注册 admin/network_guide 路由，否则左侧菜单
           # 又会出现「网络向导」项。
+          # 「RAID」「S.M.A.R.T.」菜单项同理（2026-09-21）：控制器里
+          # 对应 entry 不得带 title（带 title 就会出现在左侧菜单）。
+          # 注意：路由本身保留——首页磁盘卡片有指向这两个路由的链接。
           if unsquashfs -cat "$SQ" usr/lib/lua/luci/controller/quickstart.lua \
                > "$WORK/qs.ctrl" 2>/dev/null && [ -s "$WORK/qs.ctrl" ]; then
             if grep -q 'network_guide' "$WORK/qs.ctrl"; then
@@ -673,8 +676,14 @@ jobs:
             else
               echo "  ok      quickstart.lua 无 network_guide 注册（网络向导已移除）"
             fi
+            if grep -q '_("RAID")\|_("S.M.A.R.T.")' "$WORK/qs.ctrl"; then
+              echo "  BAD     quickstart.lua 的 nas/raid 或 nas/smart entry 仍带 title（应已移出左侧菜单）"
+              FAIL=1
+            else
+              echo "  ok      quickstart.lua 的 raid/smart 路由无 title（不在左侧菜单）"
+            fi
           else
-            echo "  ??      无法读取 quickstart.lua，跳过网络向导检查"
+            echo "  ??      无法读取 quickstart.lua，跳过网络向导/菜单项检查"
           fi
 
           if unsquashfs -cat "$SQ" etc/init.d/quickstart > "$WORK/qs.init" 2>/dev/null \

@@ -51,6 +51,11 @@ enable_one tasks start
 #   init.d 脚本存在时才动作，经 iStore 商店装回后重置配置即可自启。）
 enable_one ttyd start
 
+# 首次开机自动开 WiFi（2026-09-21 由 uci-defaults 改为 init 脚本：
+# 无线配置由 ieee80211 hotplug 在 kmodloader 之后才生成，uci-defaults
+# 阶段存在竞速。此处立即 start 一次，S99 软链兜底同一轮开机生效。）
+enable_one wifi_default start
+
 # 清理 LuCI 菜单缓存，确保新注册的入口立即生效
 rm -f /tmp/luci-indexcache /tmp/luci-indexcache.*
 

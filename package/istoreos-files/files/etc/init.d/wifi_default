@@ -1,0 +1,40 @@
+#!/bin/sh /etc/rc.common
+# Copyright (C) 2026 natserver
+#
+# 首次开机自动打开 WiFi（默认 SSID、无加密，需求 2026-09-20）。
+#
+# 为什么不能用 uci-defaults：无线配置不是 uci-defaults 阶段生成的。
+# OpenWrt 流程：ath11k 等内核模块由 kmodloader 在 S10boot 里加载，
+# 之后由 /etc/hotplug.d/ieee80211/10-wifi-detect 调 /sbin/wifi config
+# 才生成 /etc/config/wireless（每个 wifi-device 带 disabled '1'）。
+# uci-defaults 同在 S10boot 执行，与上述流程存在竞速，先跑就扑空。
+# 本脚本排在 S99，届时 radios 与无线配置均已就绪。
+#
+# 只生效一次：/etc 下的标记文件随 sysupgrade 保留配置一起保留，
+# 所以保留配置升级不会重开 WiFi；之后用户手动关 WiFi 重启也不会
+# 被自动打开。全新刷机（不保留配置）则首次开机即自动打开。
+
+START=99
+STOP=89
+
+MARKER=/etc/.wifi_default_applied
+
+start() {
+	[ -f "$MARKER" ] && return 0
+
+	local i=0 found=0
+	while uci -q get "wireless.@wifi-device[$i]" >/dev/null 2>&1; do
+		uci -q delete "wireless.@wifi-device[$i].disabled"
+		found=1
+		i=$((i + 1))
+	done
+
+	# 没有任何 radio（无线配置尚未生成/无无线网卡）则留待下次开机重试
+	[ "$found" = "1" ] || return 0
+
+	uci -q commit wireless
+	touch "$MARKER"
+
+	/sbin/wifi up
+	return 0
+}
