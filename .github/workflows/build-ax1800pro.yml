@@ -47,12 +47,13 @@ jobs:
           # 会误报 CR 并可能破坏密钥内容。故：
           #   - 规范化只对「文本且含 CR」的文件做（grep -lIZ 筛选）
           #   - 断言用 grep -I 跳过二进制文件
-          find package/quickstart package/luci-app-quickstart \
-               package/istoreos-files/files/etc -type f -print0 \
+          #
+          # 2026-09-22：package/quickstart 与 package/luci-app-quickstart 已按
+          # 需求整体移除，guard 仅剩 istoreos-files。
+          find package/istoreos-files/files/etc -type f -print0 \
             | xargs -0 -r grep -lIZ $'\r' \
             | xargs -0 -r sed -i 's/\r$//'
-          if grep -rlUI $'\r' package/quickstart package/luci-app-quickstart \
-               package/istoreos-files/files/etc; then
+          if grep -rlUI $'\r' package/istoreos-files/files/etc; then
             echo "::error::以上文件仍含 CR，固件内脚本将无法执行"
             exit 1
           fi
@@ -67,8 +68,11 @@ jobs:
           # 于是 make 的 wildcard 匹配 po/zh_Hans/*.po 为空 → po2lmo 不执行
           # → quickstart.zh-cn.lmo 缺失 → 左侧菜单显示英文。
           # 这种文件在 Windows 上肉眼完全看不出来，所以在这里硬断言。
+          #
+          # 2026-09-22：package/luci-app-quickstart 整体移除后，本守卫无
+          # 监控对象，保留骨架代码以便将来引入新 luci-app 时复用。
           bad=0
-          for d in package/quickstart/po package/luci-app-quickstart/po; do
+          for d in package/luci-app-store/po; do
             [ -d "$d" ] || continue
             for e in "$d"/*; do
               [ -e "$e" ] || continue
@@ -137,14 +141,18 @@ jobs:
       - name: 生成 seed 配置 (Generate .config)
         run: |
           # 说明：
-          # iStoreOS 的「完全体界面」本体是 luci-app-quickstart（首页；「网络向导」菜单项已于 2026-09-20 按需求移除），
-          # 而 luci-app-quickstart 的 LUCI_DEPENDS 是 "+quickstart +luci-app-store"。
-          # quickstart 二进制本身又依赖一长串工具包（shadow-* / smartmontools /
-          # parted / mdadm / ip-full / bash ...）。
-          # OpenWrt 的 defconfig 对「依赖不满足」的包是**【静默丢弃】**——
-          # 不报错、不提示，直接把符号从 .config 里抹掉。只要链上任一环缺失，
-          # 整个 quickstart 界面就会消失（这正是上一版固件没有首页的原因）。
-          # 因此这里把整条依赖链逐项显式列出，并在后面用独立的校验步骤卡住。
+          # 2026-09-22 起按需求移除 quickstart 栈：
+          #   - quickstart（首页 SPA 后端守护进程 + 磁盘管理 / RAID / SMART / 网络向导）
+          #   - luci-app-quickstart（首页 SPA 前端控制器）
+          #   - luci-i18n-quickstart-zh-cn（中文翻译）
+          # A2 节（smartmontools/mdadm/e2fsprogs/parted/bash/shadow-* 等）随之
+          # 全删——这些只是 quickstart 的 DEPENDS，quickstart 走了它们都成孤儿。
+          # iStore 应用商店（luci-app-store）+ taskd + luci-lib-taskd + luci-lib-xterm
+          # **保留**（独立的商店后台与终端组件，不依赖 quickstart）。
+          # 后果：登录 LuCI 不再有「首」首页（这是 iStoreOS 的 SPA 主页）；
+          # 用户看到的是原生 LuCI 左侧菜单 + 应用商店菜单项。
+          # 文件系统 kmod（ext4/f2fs/ntfs3/exfat）和分区工具 parted/e2fsprogs
+          # 不再打包——需要时经 iStore 商店装回 parted、block-mount 等。
           cat > .config <<'EOF'
           CONFIG_TARGET_qualcommax=y
           CONFIG_TARGET_qualcommax_ipq60xx=y
@@ -154,32 +162,12 @@ jobs:
           CONFIG_KERNEL_BUILD_DOMAIN="istoreos"
 
           # ===============================================================
-          # A. iStoreOS 完整版界面栈（首页 / 应用商店；「网络向导」菜单项已移除）
+          # A. iStore 应用商店（独立的 luci-app，与 quickstart 解耦）
           # ===============================================================
           CONFIG_PACKAGE_luci-app-store=y
-          CONFIG_PACKAGE_quickstart=y
-          CONFIG_PACKAGE_luci-app-quickstart=y
-          CONFIG_PACKAGE_luci-i18n-quickstart-zh-cn=y
           CONFIG_PACKAGE_taskd=y
           CONFIG_PACKAGE_luci-lib-taskd=y
           CONFIG_PACKAGE_luci-lib-xterm=y
-
-          # A2. quickstart 的硬依赖（缺一个 → 整条链被 defconfig 丢弃）
-          # 注：smartmontools 家族与 mdadm 是 quickstart 的 DEPENDS
-          # （首页磁盘管理要用），不是可移除的 luci-app 依赖，必须保留。
-          CONFIG_PACKAGE_shadow-utils=y
-          CONFIG_PACKAGE_shadow-useradd=y
-          CONFIG_PACKAGE_mount-utils=y
-          CONFIG_PACKAGE_block-mount=y
-          CONFIG_PACKAGE_lsblk=y
-          CONFIG_PACKAGE_e2fsprogs=y
-          CONFIG_PACKAGE_parted=y
-          CONFIG_PACKAGE_smartmontools=y
-          CONFIG_PACKAGE_smartd=y
-          CONFIG_PACKAGE_smartmontools-drivedb=y
-          CONFIG_PACKAGE_mdadm=y
-          CONFIG_PACKAGE_ip-full=y
-          CONFIG_PACKAGE_bash=y
 
           # ===============================================================
           # B. iStoreOS 外观（argon 主题 + 图标字体）
@@ -196,8 +184,8 @@ jobs:
           CONFIG_PACKAGE_luci-compat=y
           # 注意：**不要** 选 luci-mod-dashboard。
           # 它的 menu.d/luci-mod-dashboard.json 会注册一个 admin/dashboard 顶层项，
-          # 中文 po 把 "Dashboard" 译作「主页」——于是左侧菜单会多出一个「主页」，
-          # 和 quickstart 的「首页」并排、重复且点击无内容。
+          # 中文 po 把 "Dashboard" 译作「主页」——左侧菜单会多出一个空白的「主页」，
+          # 与应用商店的「首」点击无内容。
           # 官方 iStoreOS 25.12.5 的 /usr/share/luci/menu.d 里根本没有
           # luci-mod-dashboard.json，即官方就不装这个包。
 
@@ -230,20 +218,19 @@ jobs:
           CONFIG_PACKAGE_webdavfs=y
 
           # ===============================================================
-          # ===============================================================
-          # F. 服务菜单（截图里点开「服务」应有的常用项）
-          # 2026-09-20 按需求移除 wol / upnp / ddns，存储服务见 E 节。
-          # 注：quickstart 首页自带的「远程访问/DDNS 指南」走 /u/guide/ddns/
-          # 接口（quickstart 二进制提供），与 luci-app-ddns 插件无关，不受影响。
-          # ===============================================================
+          # F. 服务菜单
+          # 2026-09-20 按需求移除 wol / upnp / ddns，存储服务见 E 节；
+          # 2026-09-22 quickstart 栈移除，原文档提到的「远程访问/DDNS 指南」
+          # 一并消失（quickstart 二进制本身就是该功能提供者）。
           # 2026-09-20 起按需求移除 docker 全家（docker/dockerd/luci-app-dockerman），
           # 需要时刷机后经 iStore 商店自行安装。
+          # ===============================================================
           CONFIG_PACKAGE_luci-app-filetransfer=y
           CONFIG_PACKAGE_luci-lib-fs=y
           CONFIG_PACKAGE_luci-app-tn-netports=y
 
           # ===============================================================
-          # G. 常用命令行工具（quickstart / 运维都要用）
+          # G. 常用命令行工具（运维都要用）
           # ===============================================================
           CONFIG_PACKAGE_curl=y
           CONFIG_PACKAGE_tar=y
@@ -317,25 +304,13 @@ jobs:
           # 注意：这段刻意不用 shell 函数 + 命令替换（$(...)）收集结果——
           # 那样会把 ::group:: 之类的日志行一起吸进变量，造成误报。
           # 改为写临时文件，再读文件判断。
+          # 2026-09-22 移除 quickstart 栈后，HARD 清单只需卡住 iStore 商店、
+          # 基础 LuCI、终端、主题这几条。
           HARD="
           luci-app-store
-          quickstart
-          luci-app-quickstart
-          luci-i18n-quickstart-zh-cn
           taskd
           luci-lib-taskd
           luci-lib-xterm
-          shadow-utils
-          shadow-useradd
-          mount-utils
-          block-mount
-          lsblk
-          e2fsprogs
-          parted
-          smartmontools
-          mdadm
-          ip-full
-          bash
           luci
           luci-app-firewall
           ttyd
@@ -428,16 +403,17 @@ jobs:
             exit 1
           fi
           echo "::group::固件包清单中的界面组件"
-          grep -E "quickstart|store|taskd|webdav|argon" "$MANIFEST" || echo "  （无命中）"
+          grep -E "store|taskd|webdav|argon|filetransfer|tn-netports" "$MANIFEST" || echo "  （无命中）"
           echo "::endgroup::"
 
-          # 已按需求移除的 luci-app 前端及其孤儿依赖（2026-09-20 两批）：
+          # 已按需求移除的 luci-app 前端及其孤儿依赖（2026-09-20 两批 + 2026-09-22）：
           #   docker 全家 / samba4 / ksmbd / nfs / cifs / minidlna / hd-idle /
           #   wol / upnp / ddns —— 后端（samba4-server、ksmbd-server、
           #   nfs-kernel-server、minidlna、hd-idle、ddns-scripts 等）只被对应
           #   luci-app 拉入，一并移除。
-          # 注意：smartmontools 家族与 mdadm 是 quickstart 本体的 DEPENDS，
-          # **不在**移除范围（保留首页磁盘管理/RAID/SMART 功能）。
+          # 2026-09-22 起 quickstart 整栈（含 luci-app-quickstart + i18n +
+          # smartmontools 家族 + mdadm + parted + e2fsprogs + shadow-* 等全部
+          # 孤儿依赖）也在移除范围内——见 BANNED 清单。
           # 命中任意一个即构建失败，防止依赖关系把它们悄悄拉回来。
           BANNED="dockerd docker luci-app-dockerman luci-i18n-dockerman-zh-cn
             samba4-server samba4-libs luci-app-samba4 luci-i18n-samba4-zh-cn
@@ -447,7 +423,12 @@ jobs:
             hd-idle luci-app-hd-idle
             luci-app-wol luci-i18n-wol-zh-cn
             luci-app-upnp luci-i18n-upnp-zh-cn
-            luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts"
+            luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts
+            quickstart luci-app-quickstart luci-i18n-quickstart-zh-cn
+            startdhns
+            shadow-utils shadow-useradd mount-utils block-mount lsblk
+            e2fsprogs parted smartmontools smartd smartmontools-drivedb mdadm
+            ip-full bash"
           HIT=0
           for p in $BANNED; do
             if grep -q "^$p " "$MANIFEST"; then
@@ -456,18 +437,18 @@ jobs:
             fi
           done
           [ "$HIT" -eq 0 ] || exit 1
-          echo "移除校验通过：manifest 中无 docker/samba4/ksmbd/nfs/cifs/minidlna/hd-idle/wol/upnp 组件"
+          echo "移除校验通过：manifest 中无 docker/samba4/ksmbd/nfs/cifs/minidlna/hd-idle/wol/upnp/ddns/quickstart 组件"
 
-          # 固件必须真的含有首页组件，否则这次构建算白干
-          if ! grep -q '^quickstart ' "$MANIFEST"; then
-            echo "::error::manifest 中没有 quickstart，首页无法工作（网络向导已移除）"
+          # 固件必须真的含有商店组件（taskd 是 luci-app-store 后端）
+          if ! grep -q '^taskd ' "$MANIFEST"; then
+            echo "::error::manifest 中没有 taskd，应用商店无法工作"
             exit 1
           fi
-          if ! grep -q '^luci-app-quickstart ' "$MANIFEST"; then
-            echo "::error::manifest 中没有 luci-app-quickstart，LuCI 中不会出现首页"
+          if ! grep -q '^luci-app-store ' "$MANIFEST"; then
+            echo "::error::manifest 中没有 luci-app-store，菜单不会出现应用商店"
             exit 1
           fi
-          echo "界面组件校验通过：quickstart + luci-app-quickstart 均已入固件"
+          echo "应用商店校验通过：luci-app-store + taskd 均已入固件"
 
           # TUN 支持必须真的进固件：显式点名，缺了就失败，避免静默漏掉
           if ! grep -q '^kmod-tun ' "$MANIFEST"; then
@@ -478,17 +459,10 @@ jobs:
 
       - name: 校验服务自启 (Verify services are enabled at first boot)
         run: |
-          # manifest 只证明「包被装了」，不证明「服务能跑起来」。
-          # luci-app-quickstart 的菜单与页面由 luasrc/controller/quickstart.lua
-          # 用 entry({"admin","quickstart"}, template("quickstart/home"), _("QuickStart"), 1)
-          # 注册；模板渲染出来只有一个空的 <div id="app">，界面数据全靠
-          # quickstart 守护进程经 istore_backend 反代供数。
-          # 守护进程没跑 / 反代连不上 → 菜单在、点进去 502。所以这里断言：
-          #   1) quickstart 二进制 / init 脚本 / 前端资源都在 rootfs 里
-          #   2) 我们补的 99_istoreos_services 在（负责开机 enable + start）
-          #   3) init 脚本行尾是 LF —— CRLF 会让 shebang 变成
-          #      "#!/bin/sh /etc/rc.common\r"，内核 exec 直接失败
-          #   4) 反代与菜单项都正确（见下面两个 ::group::）
+          # 2026-09-22 quickstart 整体移除后，本步骤断言简化为：
+          #   1) 应用商店相关文件齐全（taskd / store 控制器）
+          #   2) 我们补的 99_istoreos_services / wifi_default 在
+          #   3) 没有多余的 luci-mod-dashboard.json（菜单不该多出「主页」）
           #
           # 实现要点（踩过的坑）：
           #  - 不要真正解包。unsquashfs 解包在同一目录重跑会
@@ -539,15 +513,12 @@ jobs:
 
           echo "::group::关键文件检查"
           FAIL=0
-          for f in usr/sbin/quickstart \
-                   etc/init.d/quickstart \
+          for f in usr/bin/tasks \
                    etc/init.d/tasks \
                    etc/uci-defaults/99_istoreos_services \
-                   etc/uci-defaults/98_luci_default_lang \
                    etc/init.d/wifi_default \
-                   usr/lib/lua/luci/controller/quickstart.lua \
-                   www/luci-static/quickstart/index.js \
-                   www/luci-static/quickstart/vendor.js; do
+                   usr/lib/lua/luci/controller/store.lua \
+                   usr/share/luci/menu.d/luci-app-store.json; do
             if grep -qxF "$f" "$LIST"; then
               echo "  ok      /$f"
             else
@@ -561,33 +532,6 @@ jobs:
           grep '^etc/uci-defaults/' "$LIST" || echo "  （无）"
           echo "::endgroup::"
 
-          # 中文界面链路：quickstart 的 SPA 是「以中文为源语言」的——
-          #   i18n/zh-cn.json 是空壳，翻译表为空时回退到 key（key 就是中文原文），
-          #   只有 i18n/en.json 存着「中文 key -> 英文」对照表。
-          # 另外 luci-app-quickstart 控制器的菜单项是 _("QuickStart") 这类
-          # 英文 msgid，靠 po/zh-cn/quickstart.po 翻成「首页 /
-          # 磁盘阵列 / 网口配置」——没有 .lmo 左侧菜单就是英文。
-          #
-          # 这里改成硬失败（原来是软警告）。因为 run #32 的产物就踩过这个坑：
-          #   po/zh_Hans 本是软链，却以 mode 100644 的 5 字节文本文件存进了库，
-          #   luci.mk 的 $(notdir $(wildcard po/*)) 于是枚举出 zh-cn 与 zh_Hans，
-          #   别名把 zh_Hans 映射成同一个包名并「后定义覆盖」，最终生效的规则去
-          #   匹配 po/zh_Hans/*.po —— 那是个文件不是目录，匹配为空 →
-          #   po2lmo 压根没执行 → .lmo 缺失，而同一规则里的 uci-defaults
-          #   是无条件写的，所以「包装上了、语言名注册了、翻译文件没有」。
-          # 静默放过就会让用户看到英文菜单，所以必须拦住发版。
-          echo "::group::中文语言目录（硬检查）"
-          if grep -qE '^usr/lib/lua/luci/i18n/quickstart\.(zh-cn|zh_Hans)\.lmo$' "$LIST"; then
-            grep -E '^usr/lib/lua/luci/i18n/quickstart\.' "$LIST" | sed 's/^/  ok      \//'
-          else
-            echo "  MISSING /usr/lib/lua/luci/i18n/quickstart.zh-cn.lmo"
-            echo "          （左侧菜单会显示 QuickStart / NetworkGuide 等英文）"
-            FAIL=1
-          fi
-          echo "  -- 该目录实际内容 --"
-          grep '^usr/lib/lua/luci/i18n/' "$LIST" | sed 's/^/    /' || echo "    （无）"
-          echo "::endgroup::"
-
           echo "::group::默认语言落点（软检查）"
           if unsquashfs -cat "$SQ" etc/config/luci 2>/dev/null | grep -qE "^\s*option lang '(zh-cn|auto)'"; then
             echo "  ok      /etc/config/luci 里有 lang 配置"
@@ -596,122 +540,23 @@ jobs:
           fi
           echo "::endgroup::"
 
-          echo "::group::init 脚本行尾检查（必须为 LF）"
-          CRLF_HIT=0
-          for f in etc/init.d/quickstart etc/init.d/startdhns; do
-            if unsquashfs -cat "$SQ" "$f" > "$WORK/init.out" 2>/dev/null \
-               && [ -s "$WORK/init.out" ]; then
-              if grep -qU $'\r' "$WORK/init.out"; then
-                echo "  CRLF    /$f   <-- 内核无法 exec，服务起不来"
-                CRLF_HIT=1
-              else
-                echo "  ok      /$f"
-              fi
-            else
-              echo "  ??      无法读取 /$f，跳过行尾检查"
-            fi
-          done
-          echo "::endgroup::"
-
-          if [ "$CRLF_HIT" -ne 0 ]; then
-            echo "::error::固件内 init 脚本含 CRLF，刷机后 quickstart 服务不会启动"
-            exit 1
-          fi
-
-          # ---------------------------------------------------------------
-          # 反代控制器 / 菜单项检查
-          #
-          # 用户实测现象（rel-20260913-1339 之后）：
-          #   左侧菜单多出一个「主页」（其实是 luci-mod-dashboard 的 Dashboard），
-          #   且「首页」点开报 500 Internal Server Error（当时「网络向导」尚未移除）。
-          # 根因：
-          #   a) luci-mod-dashboard 的 menu.d 注册了 admin/dashboard，
-          #      中文 po 把 "Dashboard" 译作「主页」→ 与「首页」重复。
-          #      官方 iStoreOS 根本不装这个包（其 menu.d 里没有这个 json）。
-          #   b) istore_backend.lua 连 quickstart 守护进程的那段写错了：
-          #      nixio 的 Socket:connect 原型是 connect(host, port)，
-          #      对 AF_UNIX 也必须给 port(0)；上一版少传 port 直接抛 Lua 错，
-          #      控制器整体 500 → 前端显示「网络异常：500 Internal Server Error」。
-          #      现在改成：先连 TCP 127.0.0.1:3038（官方验证过的路径），
-          #      失败再退 Unix socket，全部 pcall 包裹。
-          #   c) quickstart.init 需要先 mkdir /var/run/quickstart，
-          #      否则二进制 listen unix 失败后退出、procd 反复 respawn。
-          # ---------------------------------------------------------------
-          echo "::group::反代控制器与菜单项（硬检查）"
-          if grep -qxF 'usr/lib/lua/luci/controller/istore_backend.lua' "$LIST"; then
-            echo "  ok      /usr/lib/lua/luci/controller/istore_backend.lua"
-            if unsquashfs -cat "$SQ" usr/lib/lua/luci/controller/istore_backend.lua \
-                 > "$WORK/backend.lua" 2>/dev/null && [ -s "$WORK/backend.lua" ]; then
-              if grep -q 'connect_backend' "$WORK/backend.lua" \
-                 && grep -q 'pcall(nixio.connect, "127.0.0.1"' "$WORK/backend.lua" \
-                 && grep -q '/var/run/quickstart/local.sock' "$WORK/backend.lua"; then
-                echo "  ok      反代含 tcp(127.0.0.1:3038) + unix(local.sock) 双通道，且连接全部 pcall 包裹"
-              else
-                echo "  BAD     反代缺少双通道/pcall 保护（点开会报 500）"
-                FAIL=1
-              fi
-            else
-              echo "  ??      无法读取 istore_backend.lua，跳过内容检查"
-            fi
-          else
-            echo "  MISSING /usr/lib/lua/luci/controller/istore_backend.lua"
-            FAIL=1
-          fi
-
+          echo "::group::反代控制器与菜单项"
+          # luci-mod-dashboard 注册的 admin/dashboard 会被中文 po 翻成「主页」，
+          # 官方 iStoreOS 根本不装这个包（menu.d 里没有这个 json）。
+          # 我们也得保证没装，否则左侧菜单会出现空白的「主页」项。
           if grep -qxF 'usr/share/luci/menu.d/luci-mod-dashboard.json' "$LIST"; then
             echo "  BAD     /usr/share/luci/menu.d/luci-mod-dashboard.json 仍在 —— 左侧菜单会多出「主页」"
             FAIL=1
           else
-            echo "  ok      没有 luci-mod-dashboard.json（不会多出「主页」）"
-          fi
-          if grep -qxF 'usr/share/luci/menu.d/luci-app-quickstart.json' "$LIST"; then
-            echo "  note    /usr/share/luci/menu.d/luci-app-quickstart.json 存在（其裸 title 会盖掉 _() 翻译）"
-          else
-            echo "  ok      没有 luci-app-quickstart.json（菜单标题走 controller 的 _() 翻译 → 首页）"
-          fi
-
-          # 「网络向导」必须真的移除（2026-09-20）：
-          # 控制器里不得再注册 admin/network_guide 路由，否则左侧菜单
-          # 又会出现「网络向导」项。
-          # 「RAID」「S.M.A.R.T.」菜单项同理（2026-09-21）：控制器里
-          # 对应 entry 不得带 title（带 title 就会出现在左侧菜单）。
-          # 注意：路由本身保留——首页磁盘卡片有指向这两个路由的链接。
-          if unsquashfs -cat "$SQ" usr/lib/lua/luci/controller/quickstart.lua \
-               > "$WORK/qs.ctrl" 2>/dev/null && [ -s "$WORK/qs.ctrl" ]; then
-            if grep -q 'network_guide' "$WORK/qs.ctrl"; then
-              echo "  BAD     quickstart.lua 仍注册 network_guide（网络向导应已移除）"
-              FAIL=1
-            else
-              echo "  ok      quickstart.lua 无 network_guide 注册（网络向导已移除）"
-            fi
-            if grep -q '_("RAID")\|_("S.M.A.R.T.")' "$WORK/qs.ctrl"; then
-              echo "  BAD     quickstart.lua 的 nas/raid 或 nas/smart entry 仍带 title（应已移出左侧菜单）"
-              FAIL=1
-            else
-              echo "  ok      quickstart.lua 的 raid/smart 路由无 title（不在左侧菜单）"
-            fi
-          else
-            echo "  ??      无法读取 quickstart.lua，跳过网络向导/菜单项检查"
-          fi
-
-          if unsquashfs -cat "$SQ" etc/init.d/quickstart > "$WORK/qs.init" 2>/dev/null \
-             && [ -s "$WORK/qs.init" ]; then
-            if grep -q 'mkdir -p /var/run/quickstart' "$WORK/qs.init"; then
-              echo "  ok      quickstart.init 会先建 /var/run/quickstart"
-            else
-              echo "  BAD     quickstart.init 未建 /var/run/quickstart（unix listen 会失败，服务起不来）"
-              FAIL=1
-            fi
-          else
-            echo "  ??      无法读取 quickstart.init，跳过内容检查"
+            echo "  ok      没有 luci-mod-dashboard.json"
           fi
           echo "::endgroup::"
 
           if [ "$FAIL" -ne 0 ]; then
-            echo "::error::rootfs 内缺少首页运行所需文件 / 中文翻译 / 反代双通道（刷机后界面点不开、报 500 或显示英文）"
+            echo "::error::rootfs 内缺少关键文件 / 出现多余菜单项（刷机后应用商店打不开或菜单出现重复「主页」）"
             exit 1
           fi
-          echo "服务自启校验通过：二进制 / init 脚本 / 启用脚本 / 前端资源齐全，行尾为 LF，中文翻译文件在位，反代 tcp+unix 双通道正确，菜单无重复「主页」"
+          echo "服务自启校验通过：应用商店组件齐备，无多余菜单项"
 
       - name: 上传固件 (Upload firmware)
         uses: actions/upload-artifact@v4

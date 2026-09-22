@@ -3,21 +3,14 @@
 #
 # 首次刷机（非升级）时启用 iStoreOS 的常驻服务。
 #
-# 背景：iStoreOS 的若干守护进程包（quickstart / taskd / startdhns）在
-# Makefile 的 install 段里只把 init 脚本装到 /etc/init.d/，并没有创建
-# /etc/rc.d/S??<name> 软链，也没有在 uci-defaults 里无条件 enable。
-# quickstart 自带的 09-quickstart 只在 PKG_UPGRADE=1（包升级）时才 enable，
-# 所以全新编译出来的固件「首次启动」这些服务是停的。
+# 2026-09-22 移除 quickstart 栈后，本脚本只剩三个职责：
+#   1) ttyd / wifi_default / tasks 自启（这些包自带 init 脚本，
+#      但 PKG_UPGRADE=0 即全新刷机时 init 不会无条件 enable）
+#   2) 清掉 LuCI 菜单缓存，确保新装的入口立即生效
 #
-# 后果：luci-app-quickstart 的页面由 menu.d/luci-app-quickstart.json 注册
-# （action = template quickstart/home），模板渲染出来只有一个空的
-# <div id="app">，界面内容全靠 quickstart 守护进程经 ubus 供数。
-# 守护进程没跑 → 左侧菜单有「QuickStart」，点进去却是一片空白；
-# 应用商店同理（依赖 taskd）。
-#
-# 本脚本在 uci-defaults 阶段无条件补齐 enable + start。
-# 注意 S10boot 执行 uci-defaults 时 S92quickstart 早已错过，
-# 所以这里必须同时 start，只 enable 要等下次重启才生效。
+# 注：samba4 / ksmbd / minidlna / hd-idle / docker 等 luci-app 自带的服务
+# 已于 2026-09-20 整批移除；enable_one 自带 -x 守卫（脚本不在就跳过），
+# 将来经 iStore 商店装回相应包后重置配置即可恢复自启。
 
 enable_one() {
 	s="$1"; shift
@@ -36,19 +29,10 @@ enable_one() {
 	return 0
 }
 
-# 首页 / 网络向导（界面数据全部来自 quickstart 守护进程）
-enable_one quickstart start
-
-# DHCP 相关（官方用的是 boot 子命令，保持一致）
-enable_one startdhns boot
-
-# 应用商店 / 任务队列（luci-app-store 依赖 taskd）
+# 应用商店 / 任务队列（luci-app-store 依赖 taskd 即 tasks 二进制）
 enable_one tasks start
 
-# 其余随包安装的常用服务，装了就开
-# （docker/dockerd 已于 2026-09-20 按需求从固件移除，不再自启；
-#   samba4 / ksmbd / minidlna / hd-idle 同批移除。enable_one 只在
-#   init.d 脚本存在时才动作，经 iStore 商店装回后重置配置即可自启。）
+# 终端（截图中「服务 > 终端」）
 enable_one ttyd start
 
 # 首次开机自动开 WiFi（2026-09-21 由 uci-defaults 改为 init 脚本：
