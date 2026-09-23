@@ -145,14 +145,16 @@ jobs:
           #   - quickstart（首页 SPA 后端守护进程 + 磁盘管理 / RAID / SMART / 网络向导）
           #   - luci-app-quickstart（首页 SPA 前端控制器）
           #   - luci-i18n-quickstart-zh-cn（中文翻译）
-          # A2 节（smartmontools/mdadm/e2fsprogs/parted/bash/shadow-* 等）随之
+          # A2 节（smartmontools/mdadm/parted/bash/shadow-* 等）随之
           # 全删——这些只是 quickstart 的 DEPENDS，quickstart 走了它们都成孤儿。
           # iStore 应用商店（luci-app-store）+ taskd + luci-lib-taskd + luci-lib-xterm
           # **保留**（独立的商店后台与终端组件，不依赖 quickstart）。
           # 后果：登录 LuCI 不再有「首」首页（这是 iStoreOS 的 SPA 主页）；
           # 用户看到的是原生 LuCI 左侧菜单 + 应用商店菜单项。
-          # 文件系统 kmod（ext4/f2fs/ntfs3/exfat）和分区工具 parted/e2fsprogs
-          # 不再打包——需要时经 iStore 商店装回 parted、block-mount 等。
+          # D 节的文件系统 kmod（ext4/f2fs/ntfs3/exfat）**照旧打包**；
+          # 仅分区工具 parted 不再打（需要时经 iStore 商店装回）。
+          # 注意 block-mount / mount-utils / e2fsprogs 属基础系统依赖
+          # （base-files / fstools 拉入），**始终保留**，见产物校验里的正向断言。
           cat > .config <<'EOF'
           CONFIG_TARGET_qualcommax=y
           CONFIG_TARGET_qualcommax_ipq60xx=y
@@ -238,6 +240,11 @@ jobs:
           CONFIG_PACKAGE_xz-utils=y
           CONFIG_PACKAGE_unzip=y
           CONFIG_PACKAGE_ca-bundle=y
+          # bash：2026-09-23 恢复。原被当作 quickstart 的 A2 孤儿依赖移除，
+          # 但它是 OpenClash 等翻墙插件的硬依赖（见 README「其他翻墙插件」
+          # 一节，luci-app-openclash 的 DEPENDS 含 +bash）。daed/dae 自身
+          # 全程 #!/bin/sh 不需要它，装 bash 只为插件生态 + 运维习惯。
+          CONFIG_PACKAGE_bash=y
 
           # ===============================================================
           # H. 中文语言包（界面汉化）
@@ -250,8 +257,23 @@ jobs:
 
           # ===============================================================
           # I. dae/daed（eBPF 透明代理）底层支持
-          # daed 本体与 luci-app-daed 不编入固件（用户选择刷机后自装），
-          # 这里只保证内核 BTF / XDP / BPF 与运行时依赖就位。
+          # 对应 README「安装加强版 daed（大鹅）」一节，装机脚本来自
+          #   https://github.com/kenzok8/openwrt-daede → scripts/install.sh
+          # 该仓库 dae / daed 两个包的 DEPENDS 完全一致，逐项点名了：
+          #   +ca-bundle +kmod-sched-core +kmod-sched-bpf +kmod-veth
+          #   +v2ray-geoip +v2ray-geosite +@KERNEL_XDP_SOCKETS
+          # （vmlinux-btf 是条件依赖；本固件 KERNEL_DEBUG_INFO_BTF=y 已自带
+          #   内核 BTF，走 DAED_USE_KERNEL_BTF 分支，不需要该包）
+          # **缺任意一项，刷机后 opkg/apk 装 daed 都会因依赖不满足失败。**
+          #
+          # 运行时命令依赖（2026-09-23 补）：daed 的 daed-cleanup.sh /
+          # dae.init / daed.init 大量调用 `ip netns pids|list|del` 清理
+          # daens netns，而 **ip-tiny 不支持 netns 子命令**（上游 Makefile
+          # 里 ip-tiny 是精简版）——daede 源码注释也写明「ip-full needed
+          # for netns」。故此处显式选 ip-full。
+          # ip-tiny 与 ip-full 都 PROVIDES:=ip 并不冲突，/sbin/ip 由
+          # alternatives 优先级决定：ip-full=300 胜过 ip-tiny=200，
+          # 因此两者共存时自动指向 ip-full。
           # ===============================================================
           CONFIG_DEVEL=y
           CONFIG_BPF_TOOLCHAIN_HOST=y
@@ -266,6 +288,10 @@ jobs:
           CONFIG_PACKAGE_kmod-sched-bpf=y
           CONFIG_PACKAGE_kmod-veth=y
           CONFIG_PACKAGE_kmod-dummy=y
+          # ip-full：daed/dae 的 `ip netns` 清理逻辑需要（见上方说明）。
+          # 曾经把它当 quickstart 的 A2 孤儿依赖清掉，导致 daede 装上后
+          # netns 清理降级、残留进程清不掉 —— 2026-09-23 恢复。
+          CONFIG_PACKAGE_ip-full=y
           CONFIG_PACKAGE_v2ray-geoip=y
           CONFIG_PACKAGE_v2ray-geosite=y
           CONFIG_PACKAGE_zoneinfo-asia=y
@@ -412,8 +438,28 @@ jobs:
           #   nfs-kernel-server、minidlna、hd-idle、ddns-scripts 等）只被对应
           #   luci-app 拉入，一并移除。
           # 2026-09-22 起 quickstart 整栈（含 luci-app-quickstart + i18n +
-          # smartmontools 家族 + mdadm + parted + e2fsprogs + shadow-* 等全部
-          # 孤儿依赖）也在移除范围内——见 BANNED 清单。
+          # smartmontools 家族 + mdadm + parted + shadow-* 等孤儿依赖）也在
+          # 移除范围内——见 BANNED 清单。
+          #
+          # 【2026-09-23 修正】block-mount / mount-utils / e2fsprogs **不能**
+          # 进 BANNED。它们不是 quickstart 的孤儿依赖，而是被 base-files /
+          # fstools 拉入的基础存储工具链：
+          #   - block-mount  → UCI 挂载配置与 /etc/config/fstab 处理
+          #   - mount-utils  → mount / umount / losetup
+          #   - e2fsprogs    → mkfs.ext4 / e2fsck / resize2fs
+          # eMMC 机型挂载 overlay 分区与扩展分区全靠它们，缺了会起不来。
+          # 上一版误把它们列进 BANNED，导致固件其实编译成功、却在最后一步
+          # 反向断言处报错（manifest 中仍含已移除的组件）。现改为在下方
+          # 「产物校验」里用正向断言卡住，防将来误删。
+          #
+          # 【2026-09-23 第二次修正】ip-full 与 bash 同样**不能**进 BANNED：
+          #   - ip-full → daed/dae 的 cleanup 逻辑用 `ip netns pids|list|del`
+          #               （ip-tiny 不支持 netns）；OpenClash 的 DEPENDS 也含
+          #               +ip-full。见 README「安装加强版 daed（大鹅）」
+          #   - bash    → OpenClash 等翻墙插件的 DEPENDS 含 +bash
+          # 两者原先被当作 quickstart 的 A2 孤儿依赖清除；为不影响 daede /
+          # OpenClash 等插件已恢复（见 seed 配置 G 节 / I 节），并在下方
+          # 用正向断言钉死。
           # 命中任意一个即构建失败，防止依赖关系把它们悄悄拉回来。
           BANNED="dockerd docker luci-app-dockerman luci-i18n-dockerman-zh-cn
             samba4-server samba4-libs luci-app-samba4 luci-i18n-samba4-zh-cn
@@ -426,9 +472,8 @@ jobs:
             luci-app-ddns luci-i18n-ddns-zh-cn ddns-scripts
             quickstart luci-app-quickstart luci-i18n-quickstart-zh-cn
             startdhns
-            shadow-utils shadow-useradd mount-utils block-mount lsblk
-            e2fsprogs parted smartmontools smartd smartmontools-drivedb mdadm
-            ip-full bash"
+            shadow-utils shadow-useradd lsblk
+            parted smartmontools smartd smartmontools-drivedb mdadm"
           HIT=0
           for p in $BANNED; do
             if grep -q "^$p " "$MANIFEST"; then
@@ -456,6 +501,37 @@ jobs:
             exit 1
           fi
           echo "TUN 支持校验通过：kmod-tun 已入固件"
+
+          # 基础存储工具链必须保留（2026-09-23 修正，见上方 BANNED 注释）：
+          # block-mount / mount-utils / e2fsprogs 由 base-files / fstools 拉入，
+          # 是 eMMC 机型挂载 overlay（/overlay）与扩展分区的必需品，不可移除。
+          # 它们曾被误当 quickstart 孤儿依赖列进 BANNED，导致固件编译成功后
+          # CI 仍在最后一步失败。现改为正向断言，缺任何一个就立刻失败，
+          # 防止将来有人「顺手清理」把它们删掉。
+          for p in block-mount mount-utils e2fsprogs; do
+            if ! grep -q "^$p " "$MANIFEST"; then
+              echo "::error::manifest 中缺少基础存储工具 $p（eMMC overlay/extroot 依赖它，不可移除）"
+              exit 1
+            fi
+          done
+          echo "基础存储工具校验通过：block-mount / mount-utils / e2fsprogs 均在固件中"
+
+          # daed/dae（eBPF 透明代理）依赖链必须完整（2026-09-23 新增）
+          # README「安装加强版 daed（大鹅）」承诺开箱可用，装机脚本来自
+          # kenzok8/openwrt-daede。其 dae / daed 两个包的 DEPENDS 点名了
+          # 下面这些（含运行时命令依赖 ip-full），缺任意一项刷机后
+          # opkg/apk 装 daed 就会因依赖不满足失败，或 netns 清理降级。
+          # bash 是 OpenClash（README「其他翻墙插件」一节）的硬依赖。
+          # 这里正向钉死，防止将来精简时又被当成「孤儿」清掉。
+          for p in ip-full bash ca-bundle \
+                   kmod-sched-core kmod-sched-bpf kmod-veth kmod-xdp-sockets-diag \
+                   v2ray-geoip v2ray-geosite; do
+            if ! grep -q "^$p " "$MANIFEST"; then
+              echo "::error::manifest 中缺少 daed/翻墙插件依赖 $p（会导致装不上或功能不全，见 README）"
+              exit 1
+            fi
+          done
+          echo "daed 依赖校验通过：ip-full / bash / kmod-sched-* / kmod-veth / kmod-xdp-sockets-diag / v2ray-geo* 均在固件中"
 
       - name: 校验服务自启 (Verify services are enabled at first boot)
         run: |

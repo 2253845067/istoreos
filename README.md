@@ -18,6 +18,7 @@
 
 - **eBPF / BTF 内核支持**：已开启 BTF、XDP、BPF Events、CGROUPS、BPF 工具链，并内置 daed 所需内核模块（kmod-sched-core / kmod-sched-bpf / kmod-veth / kmod-xdp-sockets-diag）；
 - **TUN/TAP 虚拟网卡（kmod-tun）**：TUN 模式代理可直接使用。
+- **插件依赖已预置**：`ip-full`（daed/dae 的 `ip netns` 清理逻辑需要，ip-tiny 不支持 netns 子命令）与 `bash`（OpenClash 等插件依赖）已内置，`ca-bundle` / `v2ray-geoip` / `v2ray-geosite` 亦随固件打包——刷机后安装 daed / OpenClash 无需再补依赖。
 
 ## 刷机流程
 
