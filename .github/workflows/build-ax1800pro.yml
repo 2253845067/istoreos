@@ -536,9 +536,14 @@ jobs:
       - name: 校验服务自启 (Verify services are enabled at first boot)
         run: |
           # 2026-09-22 quickstart 整体移除后，本步骤断言简化为：
-          #   1) 应用商店相关文件齐全（taskd / store 控制器）
+          #   1) 应用商店相关文件齐全（taskd 主程序 + store 菜单控制器）
           #   2) 我们补的 99_istoreos_services / wifi_default 在
           #   3) 没有多余的 luci-mod-dashboard.json（菜单不该多出「主页」）
+          #
+          # 2026-09-23：清单里每一项路径都逐条对照上游 feed 的 Makefile
+          # install 段核对过，不再凭想象写。此前凭印象写的
+          # usr/bin/tasks 与 usr/share/luci/menu.d/luci-app-store.json
+          # 两个路径实际不存在，让固件编译成功却在最后一步误报失败。
           #
           # 实现要点（踩过的坑）：
           #  - 不要真正解包。unsquashfs 解包在同一目录重跑会
@@ -588,13 +593,21 @@ jobs:
           fi
 
           echo "::group::关键文件检查"
+          # 路径依据上游 feed（linkease/istore @ main）的 install 段确认，
+          # 2026-09-23 修正两处凭想象写的错路径：
+          #   taskd 包（luci/taskd/Makefile）实际装的是
+          #     etc/init.d/tasks   ← tasks.init
+          #     usr/libexec/taskd  ← taskd.sh
+          #   并不存在 usr/bin/tasks（上一版误写，导致 CI 误报 MISSING）
+          #   luci-app-store 的菜单走 luasrc/controller/store.lua 注册
+          #   （entry 方式），仓库里根本没有 usr/share/luci/menu.d/
+          #   目录，上一版检查的那个 json 是凭想象写的，同样误报。
           FAIL=0
-          for f in usr/bin/tasks \
-                   etc/init.d/tasks \
-                   etc/uci-defaults/99_istoreos_services \
+          for f in etc/init.d/tasks \
+                   usr/libexec/taskd \
                    etc/init.d/wifi_default \
-                   usr/lib/lua/luci/controller/store.lua \
-                   usr/share/luci/menu.d/luci-app-store.json; do
+                   etc/uci-defaults/99_istoreos_services \
+                   usr/lib/lua/luci/controller/store.lua; do
             if grep -qxF "$f" "$LIST"; then
               echo "  ok      /$f"
             else
@@ -602,6 +615,11 @@ jobs:
               FAIL=1
             fi
           done
+          # 失败时打印实际相关文件，省得下次再靠猜（包结构变更时一眼可见）
+          if [ "$FAIL" -ne 0 ]; then
+            echo "---- 诊断：rootfs 中 taskd / istore / store 相关实际条目 ----"
+            grep -E '(taskd|tasks|istore|store)' "$LIST" | head -40 || true
+          fi
           echo "::endgroup::"
 
           echo "::group::rootfs 内 uci-defaults"
